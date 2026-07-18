@@ -1,0 +1,81 @@
+import { ipcMain } from "electron";
+
+import {
+  loadDatabase,
+  listRecords,
+  getRecord,
+  createRecord,
+  updateRecord,
+  deleteRecord,
+  bulkCreateRecords,
+  filterRecords,
+  saveUploadedFile,
+} from "./database.js";
+
+const ALLOWED_ENTITIES = new Set([
+  "Client",
+  "ServiceOrder",
+  "Invoice",
+  "Transaction",
+  "Setting",
+]);
+
+function validateEntity(entityName) {
+  if (!ALLOWED_ENTITIES.has(entityName)) {
+    throw new Error(`Invalid entity: ${entityName}`);
+  }
+}
+
+export function registerIPC() {
+  ipcMain.handle("db:load", () => {
+    return loadDatabase();
+  });
+
+  ipcMain.handle(
+    "db:list",
+    (_event, entityName, sortExpression, limit) => {
+      validateEntity(entityName);
+      return listRecords(entityName, sortExpression, limit);
+    },
+  );
+
+  ipcMain.handle("db:get", (_event, entityName, id) => {
+    validateEntity(entityName);
+    return getRecord(entityName, id);
+  });
+
+  ipcMain.handle("db:create", (_event, entityName, data) => {
+    validateEntity(entityName);
+    return createRecord(entityName, data);
+  });
+
+  ipcMain.handle(
+    "db:update",
+    (_event, entityName, id, changes) => {
+      validateEntity(entityName);
+      return updateRecord(entityName, id, changes);
+    },
+  );
+
+  ipcMain.handle("db:delete", (_event, entityName, id) => {
+    validateEntity(entityName);
+    return deleteRecord(entityName, id);
+  });
+
+  ipcMain.handle(
+    "db:bulk-create",
+    (_event, entityName, records) => {
+      validateEntity(entityName);
+      return bulkCreateRecords(entityName, records);
+    },
+  );
+
+  ipcMain.handle("db:filter", (_event, entityName, filters) => {
+    validateEntity(entityName);
+    return filterRecords(entityName, filters);
+  });
+
+  ipcMain.handle("file:upload", (_event, fileData) => {
+  return saveUploadedFile(fileData);
+  });
+}

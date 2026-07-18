@@ -36,11 +36,10 @@ contextBridge.exposeInMainWorld("electron", {
       ),
 
     delete: (entityName, id) =>
-      ipcRenderer.invoke(
-        "db:delete",
-        entityName,
-        id,
-      ),
+      ipcRenderer.invoke("db:delete", entityName, id),
+
+    restore: (entityName, record) =>
+      ipcRenderer.invoke("db:restore", entityName, record),
 
     bulkCreate: (entityName, records) =>
       ipcRenderer.invoke(
@@ -55,6 +54,15 @@ contextBridge.exposeInMainWorld("electron", {
         entityName,
         filters,
       ),
+  },
+
+  serviceOrders: {
+    nextNumber: (prefix) => ipcRenderer.invoke("os:next-number", prefix),
+  },
+
+  backups: {
+    export: () => ipcRenderer.invoke("backup:export"),
+    import: () => ipcRenderer.invoke("backup:import"),
   },
 
   files: {

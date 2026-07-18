@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import PageHeader from "@/components/shared/PageHeader";
 import StatusBadge from "@/components/shared/StatusBadge";
 import CurrencyDisplay from "@/components/shared/CurrencyDisplay";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TrendingUp, TrendingDown, DollarSign, Wrench, AlertTriangle, Clock, ShieldCheck, ShieldAlert, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -69,24 +69,39 @@ export default function Dashboard() {
   }, [deliveredOrders, monthTransactions, orders]);
 
   const chartData = useMemo(() => {
-    const [y, m] = selectedMonth.split("-");
     const daysInMonth = moment(selectedMonth, "YYYY-MM").daysInMonth();
     const days = {};
+
     for (let d = 1; d <= daysInMonth; d++) {
-      days[d] = { day: d, lucro: 0 };
+      days[d] = { day: d, gastos: 0, lucro: 0 };
     }
-    deliveredOrders.forEach(o => {
-      const d = moment(o.entry_date || o.created_date).date();
-      if (days[d]) {
-        days[d].lucro += (o.amount_received || 0) - (o.amount_spent || 0) - (o.fee_amount || 0);
+
+    deliveredOrders.forEach((order) => {
+      const day = moment(order.entry_date || order.created_date).date();
+      if (!days[day]) return;
+
+      const received = Number(order.amount_received || 0);
+      const spent = Number(order.amount_spent || 0);
+      const fees = Number(order.fee_amount || 0);
+      const expenses = spent + fees;
+
+      days[day].gastos += expenses;
+      days[day].lucro += received - expenses;
+    });
+
+    monthTransactions.forEach((transaction) => {
+      const day = moment(transaction.date).date();
+      if (!days[day]) return;
+
+      const amount = Number(transaction.amount || 0);
+      if (transaction.type === "Entrada") {
+        days[day].lucro += amount;
+      } else if (transaction.type === "Saída") {
+        days[day].gastos += amount;
+        days[day].lucro -= amount;
       }
     });
-    monthTransactions.forEach(t => {
-      const d = moment(t.date).date();
-      if (days[d]) {
-        days[d].lucro += t.type === "Entrada" ? (t.amount || 0) : -(t.amount || 0);
-      }
-    });
+
     return Object.values(days);
   }, [deliveredOrders, monthTransactions, selectedMonth]);
 
@@ -208,18 +223,23 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Chart */}
         <div className="xl:col-span-2 bg-card rounded-xl border p-6">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Lucro por Dia</h2>
+          <h2 className="text-sm font-semibold text-foreground mb-4">Lucro e Gastos por Dia</h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="day" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `R$${v}`} />
               <Tooltip
-                formatter={(value) => [new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value), "Lucro"]}
+                formatter={(value, name) => [
+                  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value),
+                  name === "lucro" ? "Lucro" : "Gastos",
+                ]}
                 labelFormatter={(l) => `Dia ${l}`}
                 contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))" }}
               />
-              <Bar dataKey="lucro" fill="hsl(221, 83%, 53%)" radius={[4, 4, 0, 0]} />
+              <Legend formatter={(value) => value === "lucro" ? "Lucro" : "Gastos"} />
+              <Bar dataKey="lucro" name="Lucro" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="gastos" name="Gastos" fill="hsl(0, 72%, 51%)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

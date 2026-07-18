@@ -1,6 +1,8 @@
 import db from "@/api/databaseClient";
+import { deleteWithUndo } from "@/lib/undoDelete";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
@@ -17,6 +19,7 @@ import ImportCSVButton from "@/components/shared/ImportCSVButton";
 import moment from "moment";
 
 export default function Clients() {
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [clients, setClients] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -63,8 +66,7 @@ export default function Clients() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    await db.entities.Client.delete(deleteTarget.id);
-    toast({ title: "Cliente excluído" });
+    await deleteWithUndo({ entity: db.entities.Client, record: deleteTarget, toast, onChanged: loadData, label: "Cliente excluído" });
     setDeleteOpen(false);
     setDeleteTarget(null);
     setSelectedClient(null);

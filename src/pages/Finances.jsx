@@ -1,6 +1,8 @@
 import db from "@/api/databaseClient";
+import { deleteWithUndo } from "@/lib/undoDelete";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
@@ -17,6 +19,7 @@ import ImportCSVButton from "@/components/shared/ImportCSVButton";
 import moment from "moment";
 
 export default function Finances() {
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -29,7 +32,11 @@ export default function Finances() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    const query = searchParams.get("search");
+    if (query) setSearch(query);
+    loadData();
+  }, [searchParams]);
 
   const loadData = async () => {
     setLoading(true);
@@ -57,11 +64,9 @@ export default function Finances() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    await db.entities.Transaction.delete(deleteTarget.id);
-    toast({ title: "Transação excluída" });
+    await deleteWithUndo({ entity: db.entities.Transaction, record: deleteTarget, toast, onChanged: loadData, label: "Transação excluída" });
     setDeleteOpen(false);
     setDeleteTarget(null);
-    loadData();
   };
 
   const handleExportCSV = () => {

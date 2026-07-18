@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { useToast } from "@/components/ui/use-toast";
+import { Upload, X, Image as ImageIcon, FileText } from "lucide-react";
 import moment from "moment";
 
 const statuses = ["Em análise", "Aguardando peça", "Em conserto", "Pronto", "Entregue", "Cancelado"];
@@ -30,6 +31,7 @@ export default function OrderFormDialog({ open, onOpenChange, order, clients, on
     status: "Em análise",
     amount_received: 0, amount_spent: 0, fee_amount: 0,
     internal_notes: "",
+    attachments: [],
   });
 
   useEffect(() => {
@@ -52,6 +54,7 @@ export default function OrderFormDialog({ open, onOpenChange, order, clients, on
         amount_spent: order.amount_spent || 0,
         fee_amount: order.fee_amount || 0,
         internal_notes: order.internal_notes || "",
+        attachments: Array.isArray(order.attachments) ? order.attachments : [],
       });
       setSearch(order.client_name || "");
     } else {
@@ -62,6 +65,7 @@ export default function OrderFormDialog({ open, onOpenChange, order, clients, on
         status: "Em análise",
         amount_received: 0, amount_spent: 0, fee_amount: 0,
         internal_notes: "",
+        attachments: [],
       });
       setSearch("");
     }
@@ -152,11 +156,35 @@ export default function OrderFormDialog({ open, onOpenChange, order, clients, on
     setShowDropdown(false);
   };
 
-  const generateOSNumber = () => {
-    const year = new Date().getFullYear();
-    const rand = Math.floor(Math.random() * 9000) + 1000;
-    return `OS-${year}-${rand}`;
+  const uploadAttachments = async (files) => {
+    const selected = Array.from(files || []);
+    if (!selected.length) return;
+    setSaving(true);
+    try {
+      const uploaded = [];
+      for (const file of selected) {
+        const result = await db.integrations.Core.UploadFile({ file, category: "service-orders" });
+        uploaded.push({
+          ...result,
+          name: file.name,
+          type: file.type || "application/octet-stream",
+          size: file.size,
+          uploaded_at: new Date().toISOString(),
+        });
+      }
+      setForm((current) => ({ ...current, attachments: [...(current.attachments || []), ...uploaded] }));
+      toast({ title: `${uploaded.length} anexo${uploaded.length > 1 ? "s" : ""} adicionado${uploaded.length > 1 ? "s" : ""}` });
+    } catch {
+      toast({ title: "Erro ao anexar arquivo", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const removeAttachment = (index) => {
+    setForm((current) => ({ ...current, attachments: current.attachments.filter((_, itemIndex) => itemIndex !== index) }));
+  };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -172,7 +200,8 @@ export default function OrderFormDialog({ open, onOpenChange, order, clients, on
         await db.entities.ServiceOrder.update(order.id, data);
         toast({ title: "Ordem de serviço atualizada!" });
       } else {
-        data.os_number = generateOSNumber();
+        const settings = await db.entities.Setting.list("-created_date", 1);
+        data.os_number = await db.serviceOrders.nextNumber(settings[0]?.os_prefix || "OS");
         await db.entities.ServiceOrder.create(data);
         toast({ title: "Ordem de serviço criada!" });
       }
@@ -292,6 +321,35 @@ export default function OrderFormDialog({ open, onOpenChange, order, clients, on
             <div className={`text-right text-sm font-bold ${profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
               Lucro: {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(profit)}
             </div>
+          </div>
+
+
+          <div>
+            <Label>Anexos da OS</Label>
+            <label
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => { event.preventDefault(); uploadAttachments(event.dataTransfer.files); }}
+              className="mt-1 flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 text-center transition-colors hover:bg-muted/40"
+            >
+              <Upload className="mb-2 h-5 w-5 text-muted-foreground" />
+              <span className="text-sm font-medium">Arraste fotos e arquivos aqui</span>
+              <span className="text-xs text-muted-foreground">ou clique para selecionar vários arquivos</span>
+              <input type="file" multiple className="hidden" onChange={(event) => uploadAttachments(event.target.files)} />
+            </label>
+            {!!form.attachments?.length && (
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {form.attachments.map((attachment, index) => {
+                  const isImage = attachment.type?.startsWith("image/");
+                  return (
+                    <div key={`${attachment.file_url}-${index}`} className="flex items-center gap-3 rounded-lg border p-2">
+                      {isImage ? <img src={attachment.file_url} alt={attachment.name} className="h-12 w-12 rounded object-cover" /> : <div className="flex h-12 w-12 items-center justify-center rounded bg-muted"><FileText className="h-5 w-5" /></div>}
+                      <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{attachment.name || attachment.original_name}</p><p className="text-xs text-muted-foreground">{attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : "Arquivo"}</p></div>
+                      <button type="button" onClick={() => removeAttachment(index)} className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600"><X className="h-4 w-4" /></button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div>

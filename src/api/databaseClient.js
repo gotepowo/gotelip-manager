@@ -40,6 +40,10 @@ function createEntityApi(entityName) {
       return requireElectronDatabase().delete(entityName, id);
     },
 
+    restore(record) {
+      return requireElectronDatabase().restore(entityName, record);
+    },
+
     bulkCreate(records) {
       return requireElectronDatabase().bulkCreate(
         entityName,
@@ -89,6 +93,17 @@ export const db = {
   },
 
   entities,
+
+  serviceOrders: {
+    nextNumber(prefix) {
+      return window.electron.serviceOrders.nextNumber(prefix);
+    },
+  },
+
+  backups: {
+    export() { return window.electron.backups.export(); },
+    import() { return window.electron.backups.import(); },
+  },
 
   integrations: {
   Core: {

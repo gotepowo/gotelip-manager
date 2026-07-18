@@ -1,4 +1,6 @@
-import { ipcMain } from "electron";
+import { ipcMain, dialog } from "electron";
+import fs from "node:fs";
+import path from "node:path";
 
 import {
   loadDatabase,
@@ -10,6 +12,10 @@ import {
   bulkCreateRecords,
   filterRecords,
   saveUploadedFile,
+  restoreRecord,
+  getNextServiceOrderNumber,
+  getDatabasePathForBackup,
+  validateAndRestoreBackup,
 } from "./database.js";
 
 const ALLOWED_ENTITIES = new Set([
@@ -60,6 +66,37 @@ export function registerIPC() {
   ipcMain.handle("db:delete", (_event, entityName, id) => {
     validateEntity(entityName);
     return deleteRecord(entityName, id);
+  });
+
+  ipcMain.handle("db:restore", (_event, entityName, record) => {
+    validateEntity(entityName);
+    return restoreRecord(entityName, record);
+  });
+
+  ipcMain.handle("os:next-number", (_event, prefix) => getNextServiceOrderNumber(prefix));
+
+  ipcMain.handle("backup:export", async () => {
+    const sourcePath = getDatabasePathForBackup();
+    const defaultName = `gotelip-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    const result = await dialog.showSaveDialog({
+      title: "Salvar backup completo",
+      defaultPath: defaultName,
+      filters: [{ name: "Backup JSON", extensions: ["json"] }],
+    });
+    if (result.canceled || !result.filePath) return { canceled: true };
+    fs.copyFileSync(sourcePath, result.filePath);
+    return { canceled: false, path: result.filePath };
+  });
+
+  ipcMain.handle("backup:import", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "Selecionar backup para restaurar",
+      properties: ["openFile"],
+      filters: [{ name: "Backup JSON", extensions: ["json"] }],
+    });
+    if (result.canceled || !result.filePaths[0]) return { canceled: true };
+    validateAndRestoreBackup(result.filePaths[0]);
+    return { canceled: false, path: result.filePaths[0] };
   });
 
   ipcMain.handle(

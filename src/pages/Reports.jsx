@@ -6,8 +6,8 @@ import PageHeader from "@/components/shared/PageHeader";
 import CurrencyDisplay from "@/components/shared/CurrencyDisplay";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { Download, TrendingUp, TrendingDown, DollarSign, Users, Smartphone, BarChart3 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
+import { Download, TrendingUp, TrendingDown, DollarSign, Users, Smartphone } from "lucide-react";
 import moment from "moment";
 
 export default function Reports() {
@@ -23,8 +23,8 @@ export default function Reports() {
         db.entities.ServiceOrder.list("-created_date", 500),
         db.entities.Transaction.list("-date", 500),
       ]);
-      setOrders(o);
-      setTransactions(t);
+      setOrders(Array.isArray(o) ? o : []);
+      setTransactions(Array.isArray(t) ? t : []);
       setLoading(false);
     };
     load();
@@ -44,12 +44,12 @@ export default function Reports() {
   }, [transactions, y, m]);
 
   const stats = useMemo(() => {
-    const totalReceived = monthOrders.reduce((s, o) => s + (o.amount_received || 0), 0);
-    const totalSpent = monthOrders.reduce((s, o) => s + (o.amount_spent || 0), 0);
-    const totalFees = monthOrders.reduce((s, o) => s + (o.fee_amount || 0), 0);
+    const totalReceived = monthOrders.reduce((s, o) => s + Number(o.amount_received || 0), 0);
+    const totalSpent = monthOrders.reduce((s, o) => s + Number(o.amount_spent || 0), 0);
+    const totalFees = monthOrders.reduce((s, o) => s + Number(o.fee_amount || 0), 0);
     const totalProfit = totalReceived - totalSpent - totalFees;
-    const txEntries = monthTransactions.filter(t => t.type === "Entrada").reduce((s, t) => s + (t.amount || 0), 0);
-    const txExits = monthTransactions.filter(t => t.type === "Saída").reduce((s, t) => s + (t.amount || 0), 0);
+    const txEntries = monthTransactions.filter(t => t.type === "Entrada").reduce((s, t) => s + Number(t.amount || 0), 0);
+    const txExits = monthTransactions.filter(t => t.type === "Saída").reduce((s, t) => s + Number(t.amount || 0), 0);
     return { totalReceived, totalSpent, totalFees, totalProfit, txEntries, txExits, orderCount: monthOrders.length };
   }, [monthOrders, monthTransactions]);
 
@@ -60,9 +60,9 @@ export default function Reports() {
     monthOrders.forEach(o => {
       const d = moment(o.entry_date || o.created_date).date();
       if (days[d]) {
-        days[d].entradas += o.amount_received || 0;
-        days[d].saidas += (o.amount_spent || 0) + (o.fee_amount || 0);
-        days[d].lucro += (o.amount_received || 0) - (o.amount_spent || 0) - (o.fee_amount || 0);
+        days[d].entradas += Number(o.amount_received || 0);
+        days[d].saidas += Number(o.amount_spent || 0) + Number(o.fee_amount || 0);
+        days[d].lucro += Number(o.amount_received || 0) - Number(o.amount_spent || 0) - Number(o.fee_amount || 0);
       }
     });
     return Object.values(days);
@@ -72,8 +72,8 @@ export default function Reports() {
     const map = {};
     monthOrders.forEach(o => {
       if (!map[o.client_name]) map[o.client_name] = { name: o.client_name, revenue: 0, profit: 0, count: 0 };
-      map[o.client_name].revenue += o.amount_received || 0;
-      map[o.client_name].profit += o.profit || 0;
+      map[o.client_name].revenue += Number(o.amount_received || 0);
+      map[o.client_name].profit += Number(o.profit || 0);
       map[o.client_name].count += 1;
     });
     return Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
@@ -85,10 +85,39 @@ export default function Reports() {
       const device = o.device_name || "Desconhecido";
       if (!map[device]) map[device] = { name: device, count: 0, revenue: 0 };
       map[device].count += 1;
-      map[device].revenue += o.amount_received || 0;
+      map[device].revenue += Number(o.amount_received || 0);
     });
     return Object.values(map).sort((a, b) => b.count - a.count).slice(0, 10);
   }, [monthOrders]);
+
+  const sixMonthTrend = useMemo(() => {
+    return Array.from({ length: 6 }, (_, index) => moment().subtract(5 - index, "months")).map((month) => {
+      const periodOrders = orders.filter((order) => {
+        const date = order.entry_date || order.created_date;
+        return date && moment(date).format("YYYY-MM") === month.format("YYYY-MM");
+      });
+      const revenue = periodOrders.reduce((sum, order) => sum + Number(order.amount_received || 0), 0);
+      const costs = periodOrders.reduce((sum, order) => sum + Number(order.amount_spent || 0) + Number(order.fee_amount || 0), 0);
+      return { month: month.format("MMM/YY"), faturamento: revenue, custos: costs, lucro: revenue - costs };
+    });
+  }, [orders]);
+
+  const statusDistribution = useMemo(() => {
+    const counts = {};
+    monthOrders.forEach((order) => { counts[order.status || "Sem status"] = (counts[order.status || "Sem status"] || 0) + 1; });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [monthOrders]);
+
+  const categorySummary = useMemo(() => {
+    const values = {};
+    monthTransactions.forEach((transaction) => {
+      const key = transaction.category || "Outro";
+      if (!values[key]) values[key] = { name: key, entradas: 0, saidas: 0 };
+      if (transaction.type === "Entrada") values[key].entradas += Number(transaction.amount || 0);
+      else values[key].saidas += Number(transaction.amount || 0);
+    });
+    return Object.values(values).sort((a, b) => (b.entradas + b.saidas) - (a.entradas + a.saidas));
+  }, [monthTransactions]);
 
   const exportCSV = () => {
     const header = "OS,Cliente,Dispositivo,Problema,Status,Entrada,Conclusão,Recebido,Gasto,Taxa,Lucro\n";
@@ -175,6 +204,59 @@ export default function Reports() {
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      <div className="grid grid-cols-1 gap-6 mb-8 xl:grid-cols-2">
+        <div className="rounded-xl border bg-card p-6">
+          <h3 className="mb-4 text-sm font-semibold">Lucro e Gastos dos últimos 6 meses</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={sixMonthTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => `R$${Math.round(value / 1000)}k`} />
+              <Tooltip
+                formatter={(value, name) => [
+                  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value),
+                  name === "lucro" ? "Lucro" : "Gastos",
+                ]}
+              />
+              <Legend formatter={(value) => value === "lucro" ? "Lucro" : "Gastos"} />
+              <Bar dataKey="lucro" name="Lucro" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="custos" name="Gastos" fill="hsl(0, 72%, 51%)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="rounded-xl border bg-card p-6">
+          <h3 className="mb-4 text-sm font-semibold">Distribuição das OS por status</h3>
+          {statusDistribution.length ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie data={statusDistribution} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={90} label={({ name, value }) => `${name}: ${value}`}>
+                  {statusDistribution.map((_, index) => <Cell key={index} fill={`hsl(${(index * 57) % 360} 65% 52%)`} />)}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : <p className="py-24 text-center text-sm text-muted-foreground">Sem dados no período</p>}
+        </div>
+      </div>
+
+      {!!categorySummary.length && (
+        <div className="mb-8 rounded-xl border bg-card p-6">
+          <h3 className="mb-4 text-sm font-semibold">Entradas e saídas por categoria</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={categorySummary}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip formatter={(value) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value)} />
+              <Legend />
+              <Bar dataKey="entradas" fill="hsl(142 71% 45%)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="saidas" fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* Rankings */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -229,12 +229,53 @@ export function deleteRecord(entityName, id) {
     return false;
   }
 
-  records.splice(index, 1);
+  const [deletedRecord] = records.splice(index, 1);
   saveDatabase(database);
 
-  return true;
+  return deletedRecord;
 }
 
+
+export function restoreRecord(entityName, record) {
+  if (!record?.id) throw new Error("Invalid record for restore");
+  const database = loadDatabase();
+  const records = requireEntity(database, entityName);
+  const existingIndex = records.findIndex((item) => item.id === record.id);
+  const restored = { ...record, updated_date: new Date().toISOString() };
+  if (existingIndex >= 0) records[existingIndex] = restored;
+  else records.push(restored);
+  saveDatabase(database);
+  return restored;
+}
+
+export function getNextServiceOrderNumber(prefix = "OS") {
+  const database = loadDatabase();
+  const orders = requireEntity(database, "ServiceOrder");
+  const year = new Date().getFullYear();
+  const safePrefix = String(prefix || "OS").trim().replace(/[^a-zA-Z0-9_-]/g, "").toUpperCase() || "OS";
+  const pattern = new RegExp(`^${safePrefix}-${year}-(\\d+)$`, "i");
+  const highest = orders.reduce((max, order) => {
+    const match = String(order.os_number || "").match(pattern);
+    return match ? Math.max(max, Number(match[1]) || 0) : max;
+  }, 0);
+  return `${safePrefix}-${year}-${String(highest + 1).padStart(4, "0")}`;
+}
+
+export function getDatabasePathForBackup() {
+  return ensureDatabaseExists();
+}
+
+export function validateAndRestoreBackup(sourcePath) {
+  const raw = fs.readFileSync(sourcePath, "utf8");
+  const parsed = JSON.parse(raw);
+  for (const entityName of Object.keys(EMPTY_DATABASE)) {
+    if (!Array.isArray(parsed[entityName])) parsed[entityName] = [];
+  }
+  const databasePath = ensureDatabaseExists();
+  createBackup(databasePath);
+  fs.writeFileSync(databasePath, JSON.stringify(parsed, null, 2), "utf8");
+  return parsed;
+}
 export function bulkCreateRecords(entityName, items) {
   if (!Array.isArray(items)) {
     throw new Error("bulkCreate requires an array");

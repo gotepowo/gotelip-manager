@@ -1,6 +1,8 @@
 import db from "@/api/databaseClient";
+import { deleteWithUndo } from "@/lib/undoDelete";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
@@ -15,6 +17,7 @@ import { useToast } from "@/components/ui/use-toast";
 import moment from "moment";
 
 export default function Invoices() {
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [invoices, setInvoices] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -27,7 +30,11 @@ export default function Invoices() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [prefillOrder, setPrefillOrder] = useState(null);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    const query = searchParams.get("search");
+    if (query) setSearch(query);
+    loadData();
+  }, [searchParams]);
 
   const loadData = async () => {
     setLoading(true);
@@ -58,11 +65,9 @@ export default function Invoices() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    await db.entities.Invoice.delete(deleteTarget.id);
-    toast({ title: "Nota fiscal excluída" });
+    await deleteWithUndo({ entity: db.entities.Invoice, record: deleteTarget, toast, onChanged: loadData, label: "Nota fiscal excluída" });
     setDeleteOpen(false);
     setDeleteTarget(null);
-    loadData();
   };
 
   const handleAttachToOrder = (order) => {

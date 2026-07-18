@@ -81,21 +81,40 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-/* Print styles for OS document */
+/* Print styles for service documents */
 @media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
   body * {
     visibility: hidden;
   }
+
   #os-document,
-  #os-document * {
+  #os-document *,
+  #receipt-document,
+  #receipt-document * {
     visibility: visible;
   }
-  #os-document {
+
+  #os-document,
+  #receipt-document {
     position: absolute;
     left: 0;
     top: 0;
     width: 100%;
     border: none !important;
     padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  #os-document {
+    font-size: 11px;
+  }
+
+  #receipt-document {
+    max-width: 100%;
   }
 }

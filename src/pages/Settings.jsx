@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { Save, Store, Loader2, Upload } from "lucide-react";
+import { Save, Store, Loader2, Upload, Download, DatabaseBackup, RotateCcw } from "lucide-react";
 
 const formatCnpj = (value) => value.replace(/\D/g, "").slice(0, 14)
   .replace(/^(\d{2})(\d)/, "$1.$2")
@@ -42,6 +42,7 @@ export default function Settings() {
     phone: "",
     email: "",
     logo_url: "",
+    os_prefix: "OS",
   });
 
   useEffect(() => { loadData(); }, []);
@@ -60,6 +61,7 @@ export default function Settings() {
           phone: formatPhone(s.phone || ""),
           email: s.email || "",
           logo_url: s.logo_url || "",
+          os_prefix: s.os_prefix || "OS",
         });
       }
     } finally {
@@ -83,6 +85,28 @@ export default function Settings() {
       toast({ title: "Erro ao enviar logo", variant: "destructive" });
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleExportBackup = async () => {
+    try {
+      const result = await db.backups.export();
+      if (!result.canceled) toast({ title: "Backup completo salvo com sucesso!", description: result.path });
+    } catch {
+      toast({ title: "Erro ao criar backup", variant: "destructive" });
+    }
+  };
+
+  const handleImportBackup = async () => {
+    if (!window.confirm("Restaurar um backup substituirá todos os dados atuais. Um backup automático será criado antes. Continuar?")) return;
+    try {
+      const result = await db.backups.import();
+      if (!result.canceled) {
+        toast({ title: "Backup restaurado!", description: "Recarregando os dados..." });
+        setTimeout(() => window.location.reload(), 500);
+      }
+    } catch {
+      toast({ title: "O arquivo selecionado não é um backup válido", variant: "destructive" });
     }
   };
 
@@ -124,9 +148,16 @@ export default function Settings() {
             <h2 className="text-sm font-semibold">Dados da Loja</h2>
           </div>
 
-          <div>
-            <Label>Nome da Loja *</Label>
-            <Input value={form.store_name} onChange={e => setForm({ ...form, store_name: e.target.value })} placeholder="Ex: Gotelip Assistência" />
+          <div className="grid grid-cols-[1fr_160px] gap-4">
+            <div>
+              <Label>Nome da Loja *</Label>
+              <Input value={form.store_name} onChange={e => setForm({ ...form, store_name: e.target.value })} placeholder="Ex: Gotelip Assistência" />
+            </div>
+            <div>
+              <Label>Prefixo das OS</Label>
+              <Input value={form.os_prefix} onChange={e => setForm({ ...form, os_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 10) })} placeholder="OS" />
+              <p className="mt-1 text-xs text-muted-foreground">Ex.: OS-2026-0001</p>
+            </div>
           </div>
 
           <div>
@@ -174,6 +205,18 @@ export default function Settings() {
             </Button>
           </div>
         </form>
+
+        <div className="mt-6 rounded-xl border bg-card p-6">
+          <div className="flex items-center gap-2 border-b pb-3">
+            <DatabaseBackup className="h-5 w-5 text-primary" />
+            <div><h2 className="text-sm font-semibold">Backup completo do banco</h2><p className="text-xs text-muted-foreground">Inclui clientes, OS, notas, transações e configurações.</p></div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button type="button" variant="outline" className="gap-2" onClick={handleExportBackup}><Download className="h-4 w-4" /> Fazer e salvar backup</Button>
+            <Button type="button" variant="outline" className="gap-2" onClick={handleImportBackup}><RotateCcw className="h-4 w-4" /> Carregar/restaurar backup</Button>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">Ao restaurar, o banco atual é preservado automaticamente na pasta de backups antes da substituição.</p>
+        </div>
       </div>
     </div>
   );

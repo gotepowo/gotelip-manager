@@ -1,4 +1,5 @@
 import db from "@/api/databaseClient";
+import { deleteWithUndo } from "@/lib/undoDelete";
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -52,7 +53,9 @@ export default function ServiceOrders() {
 
   useEffect(() => {
     const statusParam = searchParams.get("status");
+    const searchParam = searchParams.get("search");
     if (statusParam) setStatusFilter(statusParam);
+    if (searchParam) setSearch(searchParam);
     loadData();
   }, [searchParams]);
 
@@ -84,11 +87,9 @@ export default function ServiceOrders() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    await db.entities.ServiceOrder.delete(deleteTarget.id);
-    toast({ title: "Ordem de serviço excluída" });
+    await deleteWithUndo({ entity: db.entities.ServiceOrder, record: deleteTarget, toast, onChanged: loadData, label: "Ordem de serviço excluída" });
     setDeleteOpen(false);
     setDeleteTarget(null);
-    loadData();
   };
 
   const handleMarkReady = async (order) => {

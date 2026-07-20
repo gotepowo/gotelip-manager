@@ -16,6 +16,10 @@ import {
   getNextServiceOrderNumber,
   getDatabasePathForBackup,
   validateAndRestoreBackup,
+  listTrashEntries,
+  restoreTrashEntry,
+  permanentlyDeleteTrashEntry,
+  emptyTrash,
 } from "./database.js";
 
 import {
@@ -132,6 +136,28 @@ export function registerIPC() {
     return filterRecords(entityName, filters);
   });
 
+
+
+
+  ipcMain.handle("trash:list", () => listTrashEntries());
+
+  ipcMain.handle("trash:restore", (_event, deletionId) => {
+    const result = restoreTrashEntry(deletionId);
+    markLocalDirty();
+    return result;
+  });
+
+  ipcMain.handle("trash:delete", (_event, deletionId) => {
+    const result = permanentlyDeleteTrashEntry(deletionId);
+    if (result) markLocalDirty();
+    return result;
+  });
+
+  ipcMain.handle("trash:empty", () => {
+    const result = emptyTrash();
+    markLocalDirty();
+    return result;
+  });
 
   ipcMain.handle("sync:status", () => getSyncStatus());
   ipcMain.handle("sync:choose-folder", (event) => chooseOneDriveFolder(BrowserWindow.fromWebContents(event.sender)));

@@ -14,6 +14,7 @@ release/
 # Local application data
 data/
 uploads/
+trash/
 backups/
 database.json
 
@@ -49,5 +50,6 @@ Desktop.ini
 *.sw?
 
 # Internal/project-specific files
+*.zip
 AGENTS.md
 CLAUDE.md

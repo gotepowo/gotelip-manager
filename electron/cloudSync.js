@@ -137,6 +137,7 @@ function pushSnapshot(state, syncRoot, cloudManifest) {
   fs.mkdirSync(path.join(stagingFolder, "data"), { recursive: true });
   fs.copyFileSync(path.join(appFolder, "data", "database.json"), path.join(stagingFolder, "data", "database.json"));
   copyDirectory(path.join(appFolder, "uploads"), path.join(stagingFolder, "uploads"));
+  copyDirectory(path.join(appFolder, "trash"), path.join(stagingFolder, "trash"));
   fs.writeFileSync(path.join(stagingFolder, "snapshot.json"), JSON.stringify({
     revision: nextRevision,
     createdAt: new Date().toISOString(),
@@ -169,6 +170,7 @@ function pullSnapshot(state, syncRoot, manifest) {
   const appFolder = getApplicationFolder();
   const localData = path.join(appFolder, "data");
   const localUploads = path.join(appFolder, "uploads");
+  const localTrash = path.join(appFolder, "trash");
   fs.mkdirSync(localData, { recursive: true });
 
   const sourceDb = path.join(snapshotFolder, "data", "database.json");
@@ -178,6 +180,9 @@ function pullSnapshot(state, syncRoot, manifest) {
 
   fs.rmSync(localUploads, { recursive: true, force: true });
   copyDirectory(path.join(snapshotFolder, "uploads"), localUploads);
+
+  fs.rmSync(localTrash, { recursive: true, force: true });
+  copyDirectory(path.join(snapshotFolder, "trash"), localTrash);
 
   return manifest;
 }

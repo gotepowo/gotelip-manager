@@ -65,6 +65,13 @@ contextBridge.exposeInMainWorld("electron", {
     import: () => ipcRenderer.invoke("backup:import"),
   },
 
+  trash: {
+    list: () => ipcRenderer.invoke("trash:list"),
+    restore: (deletionId) => ipcRenderer.invoke("trash:restore", deletionId),
+    delete: (deletionId) => ipcRenderer.invoke("trash:delete", deletionId),
+    empty: () => ipcRenderer.invoke("trash:empty"),
+  },
+
   sync: {
     status: () => ipcRenderer.invoke("sync:status"),
     chooseFolder: () => ipcRenderer.invoke("sync:choose-folder"),

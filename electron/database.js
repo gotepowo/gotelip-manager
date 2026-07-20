@@ -98,6 +98,258 @@ function saveDatabase(database) {
   }
 }
 
+
+function collectLocalFileUrls(value, result = new Set()) {
+  if (typeof value === "string") {
+    if (value.startsWith("local-file:")) result.add(value);
+    return result;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) collectLocalFileUrls(item, result);
+    return result;
+  }
+
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectLocalFileUrls(item, result);
+  }
+
+  return result;
+}
+
+function localFileUrlToAbsolutePath(fileUrl) {
+  if (typeof fileUrl !== "string" || !fileUrl.startsWith("local-file:")) return null;
+
+  let relativePath = decodeURIComponent(fileUrl);
+  relativePath = relativePath.replace(/^local-file:(?:\/\/\/|\/\/|\/|\\\\|\\)?/i, "");
+  relativePath = relativePath.replace(/^[/\\]+/, "");
+  relativePath = relativePath.replace(/^local-file:(?:\/\/\/|\/\/|\/|\\\\|\\)?/i, "");
+  relativePath = relativePath.replace(/^[/\\]+/, "");
+
+  const applicationFolder = path.resolve(getApplicationFolder());
+  const uploadsFolder = path.resolve(applicationFolder, "uploads");
+  const absolutePath = path.resolve(applicationFolder, relativePath.replace(/[\/\\]+/g, path.sep));
+
+  if (absolutePath !== uploadsFolder && !absolutePath.startsWith(`${uploadsFolder}${path.sep}`)) {
+    return null;
+  }
+
+  return absolutePath;
+}
+
+function getReferencedFileUrls(database) {
+  return collectLocalFileUrls(database);
+}
+
+function removeEmptyUploadFolders(startPath) {
+  const uploadsRoot = path.join(getApplicationFolder(), "uploads");
+  let current = path.dirname(startPath);
+
+  while (current.startsWith(uploadsRoot) && current !== uploadsRoot) {
+    try {
+      if (fs.readdirSync(current).length > 0) break;
+      fs.rmdirSync(current);
+      current = path.dirname(current);
+    } catch {
+      break;
+    }
+  }
+}
+
+function permanentlyDeleteUnreferencedFiles(candidateUrls, database) {
+  const referenced = getReferencedFileUrls(database);
+
+  for (const fileUrl of candidateUrls) {
+    if (referenced.has(fileUrl)) continue;
+    const absolutePath = localFileUrlToAbsolutePath(fileUrl);
+    if (!absolutePath) continue;
+
+    try {
+      fs.rmSync(absolutePath, { force: true });
+      removeEmptyUploadFolders(absolutePath);
+    } catch (error) {
+      console.warn(`Could not remove uploaded file ${absolutePath}:`, error);
+    }
+  }
+}
+
+function moveUnreferencedFilesToTrash(candidateUrls, database, deletionId) {
+  const referenced = getReferencedFileUrls(database);
+  const movedFiles = [];
+  const trashFolder = path.join(getApplicationFolder(), "trash", "uploads", deletionId);
+
+  for (const fileUrl of candidateUrls) {
+    if (referenced.has(fileUrl)) continue;
+    const sourcePath = localFileUrlToAbsolutePath(fileUrl);
+    if (!sourcePath || !fs.existsSync(sourcePath)) continue;
+
+    const targetPath = path.join(trashFolder, `${randomUUID()}-${path.basename(sourcePath)}`);
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+
+    try {
+      fs.renameSync(sourcePath, targetPath);
+      removeEmptyUploadFolders(sourcePath);
+      movedFiles.push({
+        fileUrl,
+        sourceRelativePath: path.relative(getApplicationFolder(), sourcePath),
+        trashRelativePath: path.relative(getApplicationFolder(), targetPath),
+      });
+    } catch (error) {
+      console.warn(`Could not move uploaded file to trash ${sourcePath}:`, error);
+    }
+  }
+
+  return movedFiles;
+}
+
+function restoreTrashedFiles(movedFiles = []) {
+  for (const item of movedFiles) {
+    const sourcePath = item?.sourceRelativePath
+      ? path.join(getApplicationFolder(), item.sourceRelativePath)
+      : item?.sourcePath;
+    const targetPath = item?.trashRelativePath
+      ? path.join(getApplicationFolder(), item.trashRelativePath)
+      : item?.targetPath;
+
+    if (!sourcePath || !targetPath || !fs.existsSync(targetPath)) continue;
+    try {
+      fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+      fs.renameSync(targetPath, sourcePath);
+    } catch (error) {
+      console.warn(`Could not restore uploaded file ${targetPath}:`, error);
+    }
+  }
+}
+
+
+function getTrashRoot() {
+  return path.join(getApplicationFolder(), "trash");
+}
+
+function getTrashEntriesFolder() {
+  return path.join(getTrashRoot(), "entries");
+}
+
+function getTrashEntryPath(deletionId) {
+  return path.join(getTrashEntriesFolder(), `${deletionId}.json`);
+}
+
+function writeTrashEntry(entry) {
+  fs.mkdirSync(getTrashEntriesFolder(), { recursive: true });
+  fs.writeFileSync(getTrashEntryPath(entry.id), JSON.stringify(entry, null, 2), "utf8");
+}
+
+function removeTrashEntryFiles(entry) {
+  for (const item of entry?.deletedUploads ?? []) {
+    const targetPath = item?.trashRelativePath
+      ? path.join(getApplicationFolder(), item.trashRelativePath)
+      : item?.targetPath;
+    if (!targetPath) continue;
+    try {
+      fs.rmSync(targetPath, { force: true });
+    } catch (error) {
+      console.warn(`Could not permanently remove trashed file ${targetPath}:`, error);
+    }
+  }
+
+  const uploadFolder = path.join(getTrashRoot(), "uploads", entry.id);
+  try {
+    fs.rmSync(uploadFolder, { recursive: true, force: true });
+  } catch (error) {
+    console.warn(`Could not remove trash upload folder ${uploadFolder}:`, error);
+  }
+
+  try {
+    fs.rmSync(getTrashEntryPath(entry.id), { force: true });
+  } catch (error) {
+    console.warn(`Could not remove trash entry ${entry.id}:`, error);
+  }
+}
+
+function getTrashDisplayName(entityName, record) {
+  if (entityName === "Client") return record.name || record.full_name || "Cliente sem nome";
+  if (entityName === "ServiceOrder") return record.os_number || record.device || "Ordem de serviço";
+  if (entityName === "Invoice") return record.number || record.invoice_number || record.description || "Nota fiscal";
+  if (entityName === "Transaction") return record.description || "Transação";
+  if (entityName === "Setting") return record.store_name || "Configurações";
+  return record.name || record.title || record.id;
+}
+
+export function listTrashEntries() {
+  const entriesFolder = getTrashEntriesFolder();
+  if (!fs.existsSync(entriesFolder)) return [];
+
+  const entries = [];
+  for (const fileName of fs.readdirSync(entriesFolder)) {
+    if (!fileName.endsWith(".json")) continue;
+    try {
+      const entry = JSON.parse(fs.readFileSync(path.join(entriesFolder, fileName), "utf8"));
+      entries.push({
+        id: entry.id,
+        entityName: entry.entityName,
+        deletedAt: entry.deletedAt,
+        displayName: entry.displayName,
+        recordId: entry.record?.id,
+        fileCount: Array.isArray(entry.deletedUploads) ? entry.deletedUploads.length : 0,
+      });
+    } catch (error) {
+      console.warn(`Could not read trash entry ${fileName}:`, error);
+    }
+  }
+
+  return entries.sort((a, b) => String(b.deletedAt).localeCompare(String(a.deletedAt)));
+}
+
+export function restoreTrashEntry(deletionId) {
+  const entryPath = getTrashEntryPath(deletionId);
+  if (!fs.existsSync(entryPath)) throw new Error("Item da lixeira não encontrado.");
+
+  const entry = JSON.parse(fs.readFileSync(entryPath, "utf8"));
+  const database = loadDatabase();
+  const records = requireEntity(database, entry.entityName);
+
+  restoreTrashedFiles(entry.deletedUploads);
+
+  const restored = {
+    ...entry.record,
+    updated_date: new Date().toISOString(),
+  };
+
+  const existingIndex = records.findIndex((item) => item.id === restored.id);
+  if (existingIndex >= 0) records[existingIndex] = restored;
+  else records.push(restored);
+
+  saveDatabase(database);
+  fs.rmSync(entryPath, { force: true });
+
+  const uploadFolder = path.join(getTrashRoot(), "uploads", deletionId);
+  try {
+    fs.rmSync(uploadFolder, { recursive: true, force: true });
+  } catch {}
+
+  return restored;
+}
+
+export function permanentlyDeleteTrashEntry(deletionId) {
+  const entryPath = getTrashEntryPath(deletionId);
+  if (!fs.existsSync(entryPath)) return false;
+  const entry = JSON.parse(fs.readFileSync(entryPath, "utf8"));
+  removeTrashEntryFiles(entry);
+  return true;
+}
+
+export function emptyTrash() {
+  const entries = listTrashEntries();
+  for (const entry of entries) permanentlyDeleteTrashEntry(entry.id);
+
+  // Also remove any orphaned legacy files/folders that have no manifest.
+  try {
+    fs.rmSync(getTrashRoot(), { recursive: true, force: true });
+  } catch {}
+
+  return { deletedCount: entries.length };
+}
+
 function requireEntity(database, entityName) {
   if (!Object.hasOwn(database, entityName)) {
     throw new Error(`Unknown entity: ${entityName}`);
@@ -213,8 +465,11 @@ export function updateRecord(entityName, id, changes) {
     updated_date: new Date().toISOString(),
   };
 
+  const previousFileUrls = collectLocalFileUrls(records[index]);
+
   records[index] = updatedRecord;
   saveDatabase(database);
+  permanentlyDeleteUnreferencedFiles(previousFileUrls, database);
 
   return updatedRecord;
 }
@@ -230,21 +485,55 @@ export function deleteRecord(entityName, id) {
   }
 
   const [deletedRecord] = records.splice(index, 1);
+  const deletedFileUrls = collectLocalFileUrls(deletedRecord);
   saveDatabase(database);
 
-  return deletedRecord;
+  const deletionId = `${entityName}-${id}-${Date.now()}`;
+  const deletedUploads = moveUnreferencedFilesToTrash(deletedFileUrls, database, deletionId);
+  const deletedAt = new Date().toISOString();
+
+  writeTrashEntry({
+    id: deletionId,
+    entityName,
+    deletedAt,
+    displayName: getTrashDisplayName(entityName, deletedRecord),
+    record: deletedRecord,
+    deletedUploads,
+  });
+
+  return {
+    ...deletedRecord,
+    __trash_id: deletionId,
+    __deleted_uploads: deletedUploads,
+  };
 }
 
 
 export function restoreRecord(entityName, record) {
   if (!record?.id) throw new Error("Invalid record for restore");
+
+  const {
+    __deleted_uploads: deletedUploads = [],
+    __trash_id: trashId,
+    ...recordData
+  } = record;
+  restoreTrashedFiles(deletedUploads);
+
   const database = loadDatabase();
   const records = requireEntity(database, entityName);
-  const existingIndex = records.findIndex((item) => item.id === record.id);
-  const restored = { ...record, updated_date: new Date().toISOString() };
+  const existingIndex = records.findIndex((item) => item.id === recordData.id);
+  const restored = { ...recordData, updated_date: new Date().toISOString() };
   if (existingIndex >= 0) records[existingIndex] = restored;
   else records.push(restored);
   saveDatabase(database);
+
+  if (trashId) {
+    try {
+      fs.rmSync(getTrashEntryPath(trashId), { force: true });
+      fs.rmSync(path.join(getTrashRoot(), "uploads", trashId), { recursive: true, force: true });
+    } catch {}
+  }
+
   return restored;
 }
 

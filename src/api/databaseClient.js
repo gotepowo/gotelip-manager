@@ -105,6 +105,13 @@ export const db = {
     import() { return window.electron.backups.import(); },
   },
 
+  trash: {
+    list() { return window.electron.trash.list(); },
+    restore(deletionId) { return window.electron.trash.restore(deletionId); },
+    delete(deletionId) { return window.electron.trash.delete(deletionId); },
+    empty() { return window.electron.trash.empty(); },
+  },
+
   sync: {
     status() { return window.electron.sync.status(); },
     chooseFolder() { return window.electron.sync.chooseFolder(); },

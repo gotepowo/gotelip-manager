@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { Save, Store, Loader2, Upload, Download, DatabaseBackup, RotateCcw, Cloud, FolderOpen, RefreshCw, CloudOff, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Save, Store, Loader2, Upload, Download, DatabaseBackup, RotateCcw, Cloud, FolderOpen, RefreshCw, CloudOff, CheckCircle2, AlertTriangle, Trash2, ArchiveRestore, FileText } from "lucide-react";
 
 const formatCnpj = (value) => value.replace(/\D/g, "").slice(0, 14)
   .replace(/^(\d{2})(\d)/, "$1.$2")
@@ -36,6 +36,9 @@ export default function Settings() {
   const [settingId, setSettingId] = useState(null);
   const [syncStatus, setSyncStatus] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [trashEntries, setTrashEntries] = useState([]);
+  const [trashLoading, setTrashLoading] = useState(false);
+  const [trashActionId, setTrashActionId] = useState(null);
 
   const [form, setForm] = useState({
     store_name: "",
@@ -50,7 +53,20 @@ export default function Settings() {
   useEffect(() => {
     loadData();
     loadSyncStatus();
+    loadTrashEntries();
   }, []);
+
+  const loadTrashEntries = async () => {
+    setTrashLoading(true);
+    try {
+      setTrashEntries(await db.trash.list());
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Erro ao carregar a lixeira", variant: "destructive" });
+    } finally {
+      setTrashLoading(false);
+    }
+  };
 
   const loadSyncStatus = async () => {
     try {
@@ -188,6 +204,59 @@ export default function Settings() {
     toast({ title: "Sincronização desativada neste computador." });
   };
 
+  const handleRestoreTrash = async (entry) => {
+    setTrashActionId(entry.id);
+    try {
+      await db.trash.restore(entry.id);
+      await loadTrashEntries();
+      toast({ title: "Item restaurado com sucesso!" });
+      window.dispatchEvent(new CustomEvent("database-updated"));
+    } catch (error) {
+      toast({ title: "Erro ao restaurar item", description: error.message, variant: "destructive" });
+    } finally {
+      setTrashActionId(null);
+    }
+  };
+
+  const handleDeleteTrashEntry = async (entry) => {
+    if (!window.confirm(`Apagar "${entry.displayName}" permanentemente? Essa ação não pode ser desfeita.`)) return;
+    setTrashActionId(entry.id);
+    try {
+      await db.trash.delete(entry.id);
+      await loadTrashEntries();
+      toast({ title: "Item apagado permanentemente." });
+    } catch (error) {
+      toast({ title: "Erro ao apagar item", description: error.message, variant: "destructive" });
+    } finally {
+      setTrashActionId(null);
+    }
+  };
+
+  const handleEmptyTrash = async () => {
+    const message = trashEntries.length
+      ? `Esvaziar a lixeira e apagar permanentemente ${trashEntries.length} item(ns)? Essa ação não pode ser desfeita.`
+      : "Esvaziar a pasta da lixeira? Arquivos antigos sem histórico também serão apagados permanentemente.";
+    if (!window.confirm(message)) return;
+    setTrashActionId("empty");
+    try {
+      await db.trash.empty();
+      await loadTrashEntries();
+      toast({ title: "Lixeira esvaziada." });
+    } catch (error) {
+      toast({ title: "Erro ao esvaziar a lixeira", description: error.message, variant: "destructive" });
+    } finally {
+      setTrashActionId(null);
+    }
+  };
+
+  const entityLabels = {
+    Client: "Cliente",
+    ServiceOrder: "Ordem de serviço",
+    Invoice: "Nota fiscal",
+    Transaction: "Transação",
+    Setting: "Configuração",
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.store_name.trim()) {
@@ -294,6 +363,84 @@ export default function Settings() {
             <Button type="button" variant="outline" className="gap-2" onClick={handleImportBackup}><RotateCcw className="h-4 w-4" /> Carregar/restaurar backup</Button>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">Ao restaurar, o banco atual é preservado automaticamente na pasta de backups antes da substituição.</p>
+        </div>
+
+        <div className="mt-6 rounded-xl border bg-card p-6">
+          <div className="flex items-start justify-between gap-4 border-b pb-3">
+            <div className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-primary" />
+              <div>
+                <h2 className="text-sm font-semibold">Histórico de exclusões</h2>
+                <p className="text-xs text-muted-foreground">Restaure registros e arquivos removidos ou apague-os permanentemente.</p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 text-red-500"
+              disabled={trashLoading || trashActionId === "empty"}
+              onClick={handleEmptyTrash}
+            >
+              {trashActionId === "empty" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Esvaziar lixeira
+            </Button>
+          </div>
+
+          <div className="mt-4">
+            {trashLoading ? (
+              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando histórico...
+              </div>
+            ) : trashEntries.length === 0 ? (
+              <div className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
+                A lixeira está vazia.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {trashEntries.map(entry => (
+                  <div key={entry.id} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <p className="truncate text-sm font-medium">{entry.displayName}</p>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {entityLabels[entry.entityName] || entry.entityName}
+                        {" · "}
+                        excluído em {new Date(entry.deletedAt).toLocaleString("pt-BR")}
+                        {entry.fileCount > 0 ? ` · ${entry.fileCount} arquivo(s)` : ""}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                        disabled={trashActionId === entry.id}
+                        onClick={() => handleRestoreTrash(entry)}
+                      >
+                        {trashActionId === entry.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArchiveRestore className="h-4 w-4" />}
+                        Restaurar
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="gap-2 text-red-500"
+                        disabled={trashActionId === entry.id}
+                        onClick={() => handleDeleteTrashEntry(entry)}
+                      >
+                        <Trash2 className="h-4 w-4" /> Apagar
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">Os itens permanecem na lixeira até serem restaurados ou apagados manualmente.</p>
         </div>
 
         <div className="mt-6 rounded-xl border bg-card p-6">

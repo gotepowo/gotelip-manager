@@ -58,13 +58,12 @@ export default function Reports() {
   const dailyChart = useMemo(() => {
     const daysInMonth = moment(selectedMonth, "YYYY-MM").daysInMonth();
     const days = {};
-    for (let d = 1; d <= daysInMonth; d++) days[d] = { day: d, entradas: 0, saidas: 0, lucro: 0 };
+    for (let d = 1; d <= daysInMonth; d++) days[d] = { day: d, entradas: 0, saidas: 0 };
     monthOrders.forEach(o => {
       const d = moment(o.entry_date || o.created_date).date();
       if (days[d]) {
         days[d].entradas += Number(o.amount_received || 0);
         days[d].saidas += Number(o.amount_spent || 0) + Number(o.fee_amount || 0);
-        days[d].lucro += Number(o.amount_received || 0) - Number(o.amount_spent || 0) - Number(o.fee_amount || 0);
       }
     });
     return Object.values(days);
@@ -100,7 +99,7 @@ export default function Reports() {
       });
       const revenue = periodOrders.reduce((sum, order) => sum + Number(order.amount_received || 0), 0);
       const costs = periodOrders.reduce((sum, order) => sum + Number(order.amount_spent || 0) + Number(order.fee_amount || 0), 0);
-      return { month: month.format("MMM/YY"), faturamento: revenue, custos: costs, lucro: revenue - costs };
+      return { month: month.format("MMM/YY"), entradas: revenue, saidas: costs };
     });
   }, [orders]);
 
@@ -193,29 +192,30 @@ export default function Reports() {
 
       {/* Daily Chart */}
       <div className="bg-card rounded-xl border p-6 mb-8">
-        <h3 className="text-sm font-semibold mb-4">Lucro Diário</h3>
+        <h3 className="text-sm font-semibold mb-4">Entradas e Saídas por Dia</h3>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={dailyChart}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis dataKey="day" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `R$${v}`} />
             <Tooltip
-              formatter={(value) => [new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value), "Lucro"]}
+              formatter={(value, name) => [
+                new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value),
+                name,
+              ]}
               labelFormatter={l => `Dia ${l}`}
               contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))" }}
             />
-            <Bar dataKey="lucro" radius={[4, 4, 0, 0]}>
-              {dailyChart.map((entry, i) => (
-                <Cell key={i} fill={entry.lucro >= 0 ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"} />
-              ))}
-            </Bar>
+            <Legend />
+            <Bar dataKey="entradas" name="Entradas" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="saidas" name="Saídas" fill="hsl(0, 72%, 51%)" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
       <div className="grid grid-cols-1 gap-6 mb-8 xl:grid-cols-2">
         <div className="rounded-xl border bg-card p-6">
-          <h3 className="mb-4 text-sm font-semibold">Lucro e Gastos dos últimos 6 meses</h3>
+          <h3 className="mb-4 text-sm font-semibold">Entradas e Saídas dos últimos 6 meses</h3>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={sixMonthTrend}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -228,8 +228,8 @@ export default function Reports() {
                 ]}
               />
               <Legend />
-              <Bar dataKey="lucro" name="Lucro" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="custos" name="Gastos" fill="hsl(0, 72%, 51%)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="entradas" name="Entradas" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="saidas" name="Saídas" fill="hsl(0, 72%, 51%)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

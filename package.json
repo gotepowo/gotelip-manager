@@ -1,7 +1,7 @@
 {
-  "name": "gotelip-assistencia",
+  "name": "gotelip-manager",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Sistema offline de gerenciamento da Gotelip Assistência",
   "author": "Gotelip Assistência",
   "type": "module",
@@ -104,7 +104,7 @@
   },
   "build": {
     "appId": "com.gotelip.assistencia",
-    "productName": "Gotelip Assistência",
+    "productName": "Gotelip Manager",
     "copyright": "Copyright © 2026 Gotelip Assistência",
     "directories": {
       "output": "release",

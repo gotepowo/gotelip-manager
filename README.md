@@ -1,4 +1,4 @@
-# Gotelip Assistência
+# Gotelip Manager
 
 A modern, fully offline desktop application for managing technical assistance businesses.
 

@@ -27,7 +27,7 @@ const navItems = [
 
 export default function Sidebar({ collapsed, onToggle }) {
   const location = useLocation();
-  const [store, setStore] = useState({ store_name: "Gotelip Assistência", logo_url: "" });
+  const [store, setStore] = useState({ store_name: "Gotelip Manager", logo_url: "" });
 
   useEffect(() => {
     let active = true;
@@ -37,7 +37,7 @@ export default function Sidebar({ collapsed, onToggle }) {
         const settings = await db.entities.Setting.list("-created_date", 1);
         if (active && settings[0]) {
           setStore({
-            store_name: settings[0].store_name || "Gotelip Assistência",
+            store_name: settings[0].store_name || "Gotelip Manager",
             logo_url: settings[0].logo_url || "",
           });
         }

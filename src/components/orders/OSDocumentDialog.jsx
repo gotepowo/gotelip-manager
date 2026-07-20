@@ -192,7 +192,7 @@ export default function OSDocumentDialog({ open, onOpenChange, order, onSaved })
 
   const fmtCurrency = (value) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
-  const storeName = settings?.store_name || "Gotelip Assistência";
+  const storeName = settings?.store_name || "Gotelip Manager";
   const entryDate = order.entry_date ? moment(order.entry_date).format("DD/MM/YYYY") : "—";
 
   return (

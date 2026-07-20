@@ -4,7 +4,7 @@ import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { app, dialog } from "electron";
 
-const SYNC_FOLDER_NAME = "Gotelip Assistencia Sync";
+const SYNC_FOLDER_NAME = "Gotelip Manager Sync";
 const KEEP_REVISIONS = 10;
 
 function getApplicationFolder() {

@@ -75,7 +75,7 @@ export default function Dashboard() {
     const days = {};
 
     for (let d = 1; d <= daysInMonth; d++) {
-      days[d] = { day: d, gastos: 0, lucro: 0 };
+      days[d] = { day: d, entradas: 0, saidas: 0 };
     }
 
     deliveredOrders.forEach((order) => {
@@ -85,10 +85,9 @@ export default function Dashboard() {
       const received = Number(order.amount_received || 0);
       const spent = Number(order.amount_spent || 0);
       const fees = Number(order.fee_amount || 0);
-      const expenses = spent + fees;
 
-      days[day].gastos += expenses;
-      days[day].lucro += received - expenses;
+      days[day].entradas += received;
+      days[day].saidas += spent + fees;
     });
 
     monthTransactions.forEach((transaction) => {
@@ -97,10 +96,9 @@ export default function Dashboard() {
 
       const amount = Number(transaction.amount || 0);
       if (transaction.type === "Entrada") {
-        days[day].lucro += amount;
+        days[day].entradas += amount;
       } else if (transaction.type === "Saída") {
-        days[day].gastos += amount;
-        days[day].lucro -= amount;
+        days[day].saidas += amount;
       }
     });
 
@@ -231,7 +229,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Chart */}
         <div className="xl:col-span-2 bg-card rounded-xl border p-6">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Lucro e Gastos por Dia</h2>
+          <h2 className="text-sm font-semibold text-foreground mb-4">Entradas e Saídas por Dia</h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -246,8 +244,8 @@ export default function Dashboard() {
                 contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))" }}
               />
               <Legend />
-              <Bar dataKey="lucro" name="Lucro" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="gastos" name="Gastos" fill="hsl(0, 72%, 51%)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="entradas" name="Entradas" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="saidas" name="Saídas" fill="hsl(0, 72%, 51%)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
